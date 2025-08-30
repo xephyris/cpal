@@ -1,24 +1,26 @@
 extern crate alsa;
 extern crate libc;
 
+use std::{
+    cell::Cell,
+    cmp, fmt,
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
+    time::Duration,
+    vec::IntoIter as VecIntoIter,
+};
+
 use self::alsa::poll::Descriptors;
-use crate::traits::{DeviceTrait, HostTrait, StreamTrait};
+pub use self::enumerate::{default_input_device, default_output_device, Devices};
+
 use crate::{
+    traits::{DeviceTrait, HostTrait, StreamTrait},
     BackendSpecificError, BufferSize, BuildStreamError, ChannelCount, Data,
     DefaultStreamConfigError, DeviceNameError, DevicesError, InputCallbackInfo, OutputCallbackInfo,
     PauseStreamError, PlayStreamError, SampleFormat, SampleRate, StreamConfig, StreamError,
     SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
     SupportedStreamConfigsError,
 };
-use std::cell::Cell;
-use std::cmp;
-use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
-use std::time::Duration;
-use std::vec::IntoIter as VecIntoIter;
-
-pub use self::enumerate::{default_input_device, default_output_device, Devices};
 
 pub type SupportedInputConfigs = VecIntoIter<SupportedStreamConfigRange>;
 pub type SupportedOutputConfigs = VecIntoIter<SupportedStreamConfigRange>;
@@ -237,8 +239,8 @@ impl DeviceHandles {
 
 #[derive(Clone)]
 pub struct Device {
-    name: String,
     pcm_id: String,
+    desc: Option<String>,
     handles: Arc<Mutex<DeviceHandles>>,
 }
 
@@ -302,7 +304,7 @@ impl Device {
 
     #[inline]
     fn name(&self) -> Result<String, DeviceNameError> {
-        Ok(self.name.clone())
+        Ok(self.to_string())
     }
 
     fn supported_configs(
@@ -1206,5 +1208,15 @@ impl From<alsa::Error> for StreamError {
     fn from(err: alsa::Error) -> Self {
         let err: BackendSpecificError = err.into();
         err.into()
+    }
+}
+
+impl fmt::Display for Device {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(desc) = &self.desc {
+            write!(f, "{} ({})", self.pcm_id, desc.replace('\n', ", "))
+        } else {
+            write!(f, "{}", self.pcm_id)
+        }
     }
 }
